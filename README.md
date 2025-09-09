@@ -5,7 +5,8 @@
 
 由前端和后端组成，前端只使用到基础的jquery，后端用php实现，由于只是演示，故数据库使用的是sqlite，数据库ORM类使用的是RedBeanPHP，可以很方便得支持到mysql。数据库表有两个，upload_info存储文件信息，upload_tmp存储分块文件，sql语句在database.sql。
 
-技术点
+### 技术点
+
 1）上传速度实时刷新使用的是xhr:xhrOnProgress机制实现，他会在文件上传时实时触发进度回调，这帮助实现了网速计算和进度实时刷新。
 
 2）暂停和停止功能是通过xhr的abort方法实现的，但整块上传不适用暂停。
