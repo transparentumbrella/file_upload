@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>上传演示</title>
+    <style>
+        *{
+            margin:0px;
+            padding:0px;
+        }
+    </style>
+</head>
+<body >
+    <div style="width: 1100px;margin: 0 auto;">
+    <h1>上传演示</h1>
+        <div class="upload_start_all" >全部上传</div>
+        <div  style="display: block;float: left;width: 48%;min-height: 500px;border: #23c6c8 1px solid">
+            <h3>普通上传</h3>
+            <div>
+                <input type="file" id="file_whole" multiple  >
+                <div class="file_info"></div>
+            </div>
+        </div>
+        <div  style="display: block;float: right;width: 48%;min-height: 500px;border: #23c6c8 1px solid">
+            <h3>分块上传</h3>
+            <div>
+                <input type="file" id="file_chunk"  multiple >
+                <div class="file_info"></div>
+            </div>
+        </div>
+
+    </div>
+<script type="text/javascript" src="./js/jquery-3.3.1.min.js"></script>
+<script type="text/javascript" src="./js/spark-md5.min.js"></script>
+<script type="text/javascript" src="./js/file_upload.js"></script>
+<script type="text/javascript">
+var upload_task_list = []//上传任务列表
+var token = '123456'
+var max_size = 200000000000
+var img_type_list = [
+// 'image/jpg',
+// 'image/jpeg',
+// 'image/png',
+// 'image/gif',
+// 'image/webp',
+// 'image/jfif',
+]
+var operation_url = {
+        upload_info:'./../service/index.php',
+        upload_file:'./../service/index.php',
+};
+//上传初始化
+$('body').on('change','#file_whole,#file_chunk',function(e){
+        let this_obj = $(this);
+        let file = this_obj.get(0).files;
+        let is_ok = 1;
+        $.each(file,function(i,file){
+            if (typeof  max_size != "undefined" && max_size >0 && file.size > max_size){
+                alert('文件：'+file.name+'体积过大（当前文件体积'+byte2Size(file.size)+'，最大允许体积'+byte2Size(max_size)+'）');
+                is_ok = 0;
+                return false;
+            }
+            if (img_type_list.length >0 &&  !in_array(file.type,img_type_list)){
+                this_obj.attr('is_change','0');
+                this_obj.after(this_obj.clone().val('')).remove();
+                alert('文件：'+file.name+'格式 '+file.type+' 不支持')
+                is_ok = 0;
+                return false;
+            }
+        })
+        if(is_ok != 1){
+            return false;
+        }
+        $.each(file,function(i,file){
+           file_task_put(this_obj,file)
+        })
+});
+
+
+//上传任务投放
+function file_task_put(obj,file){
+        let id = 'file_tmp_'+upload_task_list.length //自编元素id
+        let id_name = obj.attr('id') //元素id名
+        obj.parent().find('.file_info').append('<div style="border:2px dashed #23c6c8;padding:5px " ><span >文件名称：'+file.name+'</span><br/><span >文件大小：'+byte2Size(file.size)+'</span><br/><span >文件格式：'+(file.type|| '-')+'</span><br/>' +
+        '<div  class="up_progress"  id="'+id+'"  >' +
+            '<div style="display: flow-root;">' +
+                '<div style="float:left">'+
+                 '   速度:<span class="upload_progress_speed">-</span><br/>' +
+                 '   进度:<span class="upload_progress_percentage_str">-</span><br/>' +
+                 '   状态:<span class="upload_status">-</span><br/>' +
+                 '</div>' +
+                '<div style="float:right" class="upload_operation_btn" >' +
+                '   <span class="btn btn-info upload_start"  for-id="'+id+'"     style="float: right;margin-left: 5px">上传</span>' +
+                '   <span class="btn btn-info upload_suspend"  for-id="'+id+'"  style="float: right;margin-left: 5px">暂停</span>' +
+                '   <span class="btn btn-info upload_cancel"  for-id="'+id+'"     style="float: right;margin-left: 5px">取消</span>' +
+                '</div>' +
+            '</div>' +
+        '</div></div></div>');
+        //初始化上传
+        let file_upload_d = new file_upload();
+        file_upload_d.id = id
+        file_upload_d.file = file
+        file_upload_d.operation_url = {
+            'upload_info':operation_url.upload_info,
+            'upload_file':operation_url.upload_file,
+        }
+        let Headers = {
+            'authorization':'Bearer '+token,
+        };
+        file_upload_d.headers = Headers
+        if(id_name == 'file_chunk'){
+            file_upload_d.upload_method = 'chunk'
+        }
+        //开始上传回调
+        file_upload_d.uploading_callback = function(){
+            console.log('====开始上传回调==uploading_callback===')
+        }
+        //进度回调
+        file_upload_d.progress_callback = function(){
+            console.log('====进度回调==progress_callback===',file_upload_d.progress)
+            $('#'+file_upload_d.id).find('.upload_progress_percentage_str').html(file_upload_d.progress.file_upload_percentage + '%   '+ byte2Size(file_upload_d.progress.file_upload_size) + " / " + byte2Size(file_upload_d.progress.file_size))
+        }
+        //速度回调
+        file_upload_d.speed_callback = function(){
+            console.log('====速度回调==speed_callback===')
+            $('#'+file_upload_d.id).find('.upload_progress_speed').html(byte2Size(file_upload_d.progress.increase_bytes) + '/s' )
+            $('#'+file_upload_d.id).find('.upload_progress_percentage_str').html(file_upload_d.progress.file_upload_percentage + '%   '+ byte2Size(file_upload_d.progress.file_upload_size) + " / " + byte2Size(file_upload_d.progress.file_size))
+        }
+        //切片成功回调
+        file_upload_d.chunking_success_callback = ()=>{
+            console.log('====切片成功回调==chunking_success_callback===')
+        }
+        //取消成功回调
+        file_upload_d.cancel_callback = ()=>{
+            console.log('====取消成功回调==cancel_callback===')
+        }
+        //暂停成功回调
+        file_upload_d.pause_callback = ()=>{
+            console.log('====暂停成功回调==pause_callback===')
+        }
+        //操作失败回调
+        file_upload_d.fail_callback = ()=>{
+            console.log('====操作失败回调==fail_callback===')
+            console.log(file_upload_d.get_results())
+        }
+        //操作成功回调
+        file_upload_d.success_callback = function(e){
+            console.log('====操作成功回调==success_callback===')
+            console.log(file_upload_d.get_results())
+        }
+        //状态回调
+        file_upload_d.status_callback = function(e){
+            console.log('====状态回调==status_callback===')
+            let status_str = '等待上传';//上传状态    0 等待上传  1 上传中  2 暂停 3 取消   4 上传成功 5 上传失败 
+            switch (file_upload_d.get_status()) {
+                case 0:
+                    break;
+                case 1:
+                    status_str = '上传中';
+                    break;
+                case 2:
+                    status_str = '暂停';
+                    break;
+                case 3:
+                    status_str = '取消';
+                    break;
+                case 4:
+                    status_str = '上传成功';
+                    break;
+                case 5:
+                    status_str = '上传失败';
+                    break;
+                default:
+                    break;
+            }
+            $('#'+file_upload_d.id).find('.upload_status').html(status_str)
+        }
+        upload_task_list.push(file_upload_d)
+}
+  
+/*  
+字节转大小 计算文件大小函数(保留两位小数)
+size：初始文件大小
+*/
+function byte2Size(size) {
+    if (!size)
+        return "0B";
+    var num = 1024.00; //byte
+    if (size < num)
+        return size + "B";
+    if (size < Math.pow(num, 2))
+        return (size / num).toFixed(2) + "K"; //kb
+    if (size < Math.pow(num, 3))
+        return (size / Math.pow(num, 2)).toFixed(2) + "M"; //M
+    if (size < Math.pow(num, 4))
+        return (size / Math.pow(num, 3)).toFixed(2) + "G"; //G
+    return (size / Math.pow(num, 4)).toFixed(2) + "T"; //T
+}
+
+
+
+//开始上传按钮事件
+$('body').on('click','.upload_start',function(){
+    let id = $(this).attr('for-id');
+    $.each(upload_task_list,function(i,v){
+        if(id == v.id){
+            v.upload_start()
+            return false;
+        }
+    })
+});
+
+//开始所有上传按钮事件
+$('body').on('click','.upload_start_all',function(){
+    $.each(upload_task_list,function(i,v){
+        v.upload_start()
+    })
+});
+
+//暂停任务
+$('body').on('click','.upload_suspend',function(){
+    let id = $(this).attr('for-id');
+    $.each(upload_task_list,function(i,v){
+        if(id == v.id){
+           if( v.upload_method == 'whole'){
+                alert('暂停不适用于整块上传')
+                return false;
+           }
+           if( v.upload_suspend() == false){
+                alert('暂停失败')
+                return false;
+           }
+        }
+    })
+})
+//取消上传按钮事件
+$('body').on('click','.upload_cancel',function(){
+    let id = $(this).attr('for-id');
+    $.each(upload_task_list,function(i,v){
+        if(id == v.id){
+            v.upload_cancel()
+            return false;
+        }
+    })
+});
+//页面加载完成启动
+$(function() {
+});
+</script>
+</body>
+</html>
